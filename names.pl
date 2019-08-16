@@ -1229,18 +1229,12 @@ BEGIN {
     sub get_orphaned_names {
         my $self = shift;
 
-        my $all_entries = $self->{db}->get_entries();
-        my $dict_entries = $self->{dict}->{db}->get_entries();
+        my $dict_entries = $self->{dict}->get_entries_hash();
+        my $names = $self->get_names ( undef, 1 );
 
         my @orphans;
 
-        foreach my $entry (values %$all_entries) {
-            my $name = $entry->{name};
-
-            unless ( defined $dict_entries->{$name} ) {
-                push @orphans, $name;
-            }
-        }
+        @orphans = grep { not defined $dict_entries->{$_} } @$names;
 
         return \@orphans;
     }
