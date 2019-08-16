@@ -1144,12 +1144,12 @@ BEGIN {
 
     sub get_available_names {
         my $self = shift;
-        return $self->get_names ( STATUS_AVAIL );
+        return $self->get_names ( STATUS_AVAIL, 1 );
     }
 
     sub get_banned_names {
         my $self = shift;
-        return $self->get_names ( STATUS_BAN );
+        return $self->get_names ( STATUS_BAN, 1 );
     }
 
     sub do_add {
@@ -1218,12 +1218,12 @@ BEGIN {
 
     sub get_taken_names {
         my $self = shift;
-        return $self->get_names ( STATUS_TAKEN );
+        return $self->get_names ( STATUS_TAKEN, 1 );
     }
 
     sub get_unused_names {
         my $self = shift;
-        return $self->get_names ( STATUS_UNUSED );
+        return $self->get_names ( STATUS_UNUSED, 1 );
     }
 
     sub get_orphaned_names {
