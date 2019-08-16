@@ -872,9 +872,9 @@ BEGIN {
         return $self->{db}->get_entries();
     }
 
-    # get_entries ( self, status )
+    # get_entries ( self, status, want_sort )
     sub get_entries {
-        my ( $self, $status ) = @_;
+        my ( $self, $status, $want_sort ) = @_;
         my $all_entries_ref;
         my @entries;
 
@@ -883,6 +883,10 @@ BEGIN {
 
         if ( defined $status ) {
             @entries = grep { $_->{status} == $status } @entries;
+        }
+
+        if ( $want_sort ) {
+            @entries = sort { $a->{name} cmp $b->{name} } @entries;
         }
 
         return \@entries;
