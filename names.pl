@@ -866,26 +866,37 @@ BEGIN {
         );
     }
 
-    sub get_names {
+    sub get_entries_hash {
         my $self = shift;
-        my $status = shift;
 
-        my $entries = $self->{db}->get_entries();
+        return $self->{db}->get_entries();
+    }
 
-        my @names;
+    # get_entries ( self, status )
+    sub get_entries {
+        my ( $self, $status ) = @_;
+        my $all_entries_ref;
+        my @entries;
+
+        $all_entries_ref = $self->get_entries_hash();
+        @entries = values %$all_entries_ref;
 
         if ( defined $status ) {
-            foreach my $entry (values %$entries) {
-                if ( $entry->{status} == $status ) {
-                    push @names, $entry->{name};
-                }
-            }
-
-        } else {
-            foreach my $entry (values %$entries) {
-                push @names, $entry->{name};
-            }
+            @entries = grep { $_->{status} == $status } @entries;
         }
+
+        return \@entries;
+    }
+
+    # get_names ( self, ... ) -> [e.name for e in get_entries(...)]
+    sub get_names {
+        my $self = shift;
+        my $entries_ref;
+        my @names;
+
+        $entries_ref = $self->get_entries ( @_ );
+
+        @names = map { $_->{name}; } @$entries_ref;
 
         return \@names;
     }
