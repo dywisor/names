@@ -912,7 +912,7 @@ BEGIN {
         my $comment = shift;
 
         if ( scalar @$names ) {
-            my $entries = $self->{db}->get_entries();
+            my $entries = $self->get_entries_hash();
 
             $self->{db}->mark_as_dirty();
 
@@ -955,7 +955,7 @@ BEGIN {
         my $self = shift;
         my $names = shift;
 
-        my $all_entries = $self->{db}->get_entries();
+        my $all_entries = $self->get_entries_hash();
 
         if ( scalar @$names ) {
             $self->{db}->mark_as_dirty();
@@ -975,7 +975,7 @@ BEGIN {
         my $comment = shift;
         my $only_new = shift;
 
-        my $entries = $self->{db}->get_entries();
+        my $entries = $self->get_entries_hash();
 
         my @names_to_add;
         my @entries_to_update;
@@ -1058,7 +1058,7 @@ BEGIN {
 
         my $ret = 1;
 
-        my $all_entries = $self->{db}->get_entries();
+        my $all_entries = $self->get_entries_hash();
 
         my @entries;
 
@@ -1083,7 +1083,7 @@ BEGIN {
         my $self = shift;
         my $names = shift;
 
-        my $all_entries = $self->{db}->get_entries();
+        my $all_entries = $self->get_entries_hash();
 
         my @names_to_del;
 
