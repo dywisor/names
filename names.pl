@@ -1089,14 +1089,6 @@ BEGIN {
         return $ret;
     }
 
-    sub do_print {
-        my $self = shift;
-
-        my $names = $self->get_names ( STATUS_ACTIVE );
-        foreach my $name ( sort @$names ) { say {*STDOUT} $name; }
-        return 1;
-    }
-
 
     package NamesDict;
 
