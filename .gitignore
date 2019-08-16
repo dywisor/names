@@ -1,3 +1,5 @@
+*.old
+*.new
 *.gz
 *.sw[a-z]
 /names_dict
