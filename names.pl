@@ -224,7 +224,7 @@ my $COMMAND_HELP_CROSS = join "\n", @{ $COMMAND_HELP->{cross} };
 
 
 my $prog_name   = File::Basename::basename($0);
-my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|-R <DIR>|-v} <CMD> {<ARG>}";
+my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|-R <DIR>|-s|-v} <CMD> {<ARG>}";
 my $usage       = <<"EOF";
 ${NAME} (${VERSION}) - ${DESC}
 
