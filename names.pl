@@ -8,9 +8,12 @@ use feature qw( say );
 use 5.10.0;
 
 use Getopt::Long qw(:config posix_default bundling no_ignore_case );
-use File::Basename;
 
-our $VERSION = 0.1;
+use Cwd;
+use File::Basename;
+use File::Spec;
+
+our $VERSION = 0.2;
 our $NAME    = q{names};
 our $DESC    = q{make a name for yourself};
 
@@ -223,7 +226,7 @@ my $COMMAND_HELP_CROSS = join "\n", @{ $COMMAND_HELP->{cross} };
 
 
 my $prog_name   = File::Basename::basename($0);
-my $short_usage = "${prog_name} [-D <FILE>] [-P <FILE>] [-F|-N] [-m <msg>] [-n] <CMD> [<ARG>...]";
+my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|-R <DIR>} <CMD> {<ARG>}";
 my $usage       = <<"EOF";
 ${NAME} (${VERSION}) - ${DESC}
 
@@ -232,13 +235,22 @@ Usage:
   ${prog_name} -h
 
 Options:
-  -D, --dict <FILE>         names dictionary
+  -c, --clipboard           copy output to clipboard (using xclip)
+  -D, --dict <DICT>         names dictionary file
   -F, --files               treat positional arguments as files
+  -g, --git                 git-add and commit changed db files,
+                            restrict file paths to git topdir
+                            deduced from current working directory
+                            (default: autodetect)
+  --no-git                  force no-git mode
   -h, --help                print this help message and exit
   -m, --message <MSG>       comment message for various commands
   -N, --names               treat positional arguments as names
   -n, --dry-run             do not write database
-  -P, --pool <FILE>         pool of acquired names
+  -P, --pool <POOL>         pool of acquired names file
+  -R, --root <ROOT>         look up dict and pool files in <ROOT>:
+                              <ROOT>/dict/<DICT> (DICT:="default")
+                              <ROOT>/pool/<POOL> (POOL:="default")
 
 Commands operating on the names dictionary:
 ${COMMAND_HELP_DICT}
@@ -267,17 +279,81 @@ sub output_names_to_stdout {
 }
 
 
+sub output_names_to_clipboard {
+    # FIXME: maybe use Clipboard from CPAN, but how to lazy-load? (require _?)
+    my $names = shift;
+
+    my $text = join "\n", @$names;
+
+    unless ( $ENV{'DISPLAY'} ) { return 2; }
+
+    foreach my $cboard ('primary', 'clipboard') {
+        if ( open my $fh, "|-", "xclip -i -selection ${cboard}" ) {
+            print {$fh} $text;
+            close $fh;
+        } else {
+            last;
+        }
+    }
+
+    return 1;
+}
+
+
+
+# get_rooted_path ( root, subdir_path, arg, arg_default )
+sub get_rooted_path {
+    my ( $root, $subdir_path, $arg, $arg_default ) = @_;
+    my $fname;
+
+    if ( not $arg ) {
+        if ( $arg_default ) {
+            $fname = $arg_default;  # unchecked
+
+        } elsif ( $subdir_path ) {
+            return File::Spec->catfile ( $root, $subdir_path );
+
+        } else {
+            return $root;
+        }
+
+    } else {
+        $fname = File::Spec->canonpath ( $arg );
+
+        my ( $vol, $path, $_dc ) = File::Spec->splitpath ( $fname, 1 );
+
+        if ( ( $vol ) || ( $path =~ /^\//mx ) ) {
+            die "absolute paths not allowed: ${fname}\n";
+
+        } elsif ( $path =~ /(?:^|\/)(?:\.\.)(?:$|\/)/mx ) {
+            die "unsafe paths not allowed: ${fname}\n";
+        }
+    }
+
+    if ( $subdir_path ) {
+        return File::Spec->catfile ( $root, $subdir_path, $fname );
+    } else {
+        return File::Spec->catfile ( $root, $fname );
+    }
+}
+
+
 # main ( **@ARGV )
 sub main {
     my $ret;
 
     # parse args
     my $posarg_mode     = undef;
+    my $want_clipboard  = undef;
+    my $want_git        = 2;
+    my $files_root      = undef;
     my $dict_file       = undef;
     my $pool_file       = undef;
     my $want_help       = 0;
     my $want_dry_run    = 0;
     my $comment         = undef;
+
+    my $git_root        = undef;
 
     my $arg_cmd         = undef;
     my $cmd             = undef;
@@ -292,15 +368,20 @@ sub main {
     my $argv_names      = NamesList->new();
     my @argv_parsed;
 
+    my $output_list     = undef;
+
     if (
         ! GetOptions (
+            'c|clipboard'   => \$want_clipboard,
             'D|dict=s'      => \$dict_file,
+            'g|git!'        => \$want_git,
             'F|files'       => sub { $posarg_mode = 'F'; },
             'h|help'        => \$want_help,
             'm|message=s'   => \$comment,
             'N|names'       => sub { $posarg_mode = 'N'; },
             'n|dry-run'     => \$want_dry_run,
-            'P|pool=s'      => \$pool_file
+            'P|pool=s'      => \$pool_file,
+            'R|root=s'      => \$files_root,
         )
     ) {
         say {*STDERR} 'Usage: ', $short_usage or die "!$\n";
@@ -312,6 +393,41 @@ sub main {
         # newline at end supplied by $usage
         print $usage or die "!$\n";
         return 0;
+    }
+
+    if ( $want_git ) {
+        my @git_output = qx(git rev-parse --show-toplevel 2>/dev/null);
+        $git_root = shift @git_output;
+        if ( $git_root ) { chomp $git_root; }
+
+        if ( $git_root ) {
+            if ( defined $files_root ) {
+                # keep files_root as-is even if empty
+
+            } else {
+                $files_root = get_rooted_path ( $git_root, undef, 'db', undef );
+            }
+
+        } elsif ( $want_git == 2 ) {
+            $git_root = undef;
+            $want_git = 0;
+
+        } else {
+            die "Failed to get toplevel git dir!\n";
+        }
+    }
+
+    if ( $files_root ) {
+        my $real_files_root = Cwd::realpath ( $files_root );
+        die "failed to resolve root dir ${files_root}: $!\n" unless $real_files_root;
+        $files_root = $real_files_root;
+
+        $dict_file = get_rooted_path ( $files_root, 'dict', $dict_file, 'default' );
+        $pool_file = get_rooted_path ( $files_root, 'pool', $pool_file, 'default' );
+
+    } else {
+        $dict_file //= get_default_dict_file();
+        $pool_file //= get_default_pool_file();
     }
 
     $arg_cmd = shift @ARGV;
@@ -386,8 +502,6 @@ sub main {
     }
 
     if ( $cmd->{need_dict} ) {
-        $dict_file //= get_default_dict_file();
-
         $names_dict = NamesDict->new (
             NamesFlatFileDB->new ( $dict_file )
         );
@@ -395,14 +509,14 @@ sub main {
     }
 
     if ( $cmd->{need_pool} ) {
-        $pool_file //= get_default_pool_file();
-
         $names_pool = NamesPool->new (
             NamesFlatFileDB->new ( $pool_file ),
             $names_dict     # possibly undef
         );
         $names_pool->{db}->load() or die;
     }
+
+    $output_list = undef;   # redundant
 
     if ( $cmd_short eq 'A' ) {
         $names_dict->do_add ( $argv_names, $comment );
@@ -414,28 +528,20 @@ sub main {
         $names_dict->do_drop ( $argv_names );
 
     } elsif ( $cmd_short eq 'P' ) {
-        my $names = $names_dict->get_available_names();
-
-        output_names_to_stdout ( $names );
+        $output_list = $names_dict->get_available_names();
 
     } elsif ( $cmd_short eq 'f' ) {
         $names_pool->do_free();
 
     } elsif ( $cmd_short eq 'g' ) {
         my $num_entries = $argv_parsed[0] || 1;
-        my $new_names = $names_pool->do_get ( $num_entries, $comment );
-
-        output_names_to_stdout ( $new_names ) or die;
+        $output_list = $names_pool->do_get ( $num_entries, $comment );
 
     } elsif ( $cmd_short eq 'o' ) {
-        my $names = $names_pool->get_orphaned_names();
-
-        output_names_to_stdout ( $names ) or die;
+        $output_list = $names_pool->get_orphaned_names();
 
     } elsif ( $cmd_short eq 'p' ) {
-        my $names = $names_pool->get_taken_names();
-
-        output_names_to_stdout ( $names ) or die;
+        $output_list = $names_pool->get_taken_names();
 
     } elsif ( $cmd_short eq 'r' ) {
         $names_pool->do_release ( $argv_names, $comment );
@@ -444,9 +550,7 @@ sub main {
         $names_pool->do_take ( $argv_names, $comment );
 
     } elsif ( $cmd_short eq 'u' ) {
-        my $names = $names_pool->get_unused_names();
-
-        output_names_to_stdout ( $names );
+        $output_list = $names_pool->get_unused_names();
 
     } elsif ( $cmd_short eq 'w' ) {
         $names_pool->do_wipe ( $argv_names, $comment );
@@ -462,9 +566,47 @@ sub main {
         say {*STDERR} 'Discarding changes due to dry run.';
 
     } else {
-        if ( defined $names_dict ) { $names_dict->{db}->commit(); }
-        if ( defined $names_pool ) { $names_pool->{db}->commit(); }
+        my @changed_files;
+
+        if ( defined $names_dict ) {
+            if ( $names_dict->{db}->commit() == 1 ) {
+                push @changed_files, $names_dict->{db}->get_filepath();
+            }
+        }
+
+        if ( defined $names_pool ) {
+            if ( $names_pool->{db}->commit() == 1 ) {
+                push @changed_files, $names_pool->{db}->get_filepath();
+            }
+        }
+
+        if ( scalar @changed_files ) {
+            if ( $want_git ) {
+                my @cmdv;
+
+                @cmdv = ( 'git', 'add', '--chmod=-x', '--' );
+                push @cmdv, @changed_files;
+                system(@cmdv) == 0 or die "git-add returned non-zero.\n";
+
+                @cmdv = ( 'git', 'commit', '--no-edit', '--message' );
+                if ( $comment ) {
+                    push @cmdv, ($cmd->{name} . ': ' . $comment);
+                } else {
+                    push @cmdv, $cmd->{name};
+                }
+                system(@cmdv) == 0 or die "git-commit returned non-zero.\n";
+            }
+        }
     }
+
+    if ( defined $output_list ) {
+        output_names_to_stdout ( $output_list );
+
+        if ( $want_clipboard ) {
+            output_names_to_clipboard ( $output_list );
+        }
+    }
+
 
     return 0;
 }
@@ -637,6 +779,12 @@ BEGIN {
         die "abc: method not implemented: _write_entries()\n";
     }
 
+    sub get_filepath {
+        my $self = shift;
+
+        return $self->{_filepath};
+    }
+
     sub load {
         my $self = shift;
         my $entries;
@@ -695,7 +843,7 @@ BEGIN {
         if ( (defined $self->{_entries}) && $self->{_dirty} ) {
             return $self->write_file();
         } else {
-            return 1;
+            return 2;
         }
     }
 
