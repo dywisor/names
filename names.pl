@@ -130,6 +130,10 @@ my $COMMANDS = [
         short               => 'x',
         name                => 'import',
         desc                => 'register a name as acquired if new, add to dict if new',
+        desc_long           => [
+            'for names matching stem/suffix,',
+            'add only new stems to dict',
+        ],
         group               => 'cross',
         need_dict           => 1,
         need_pool           => 1,
@@ -174,7 +178,7 @@ foreach my $cmd (@$COMMANDS) {
     }
 
     $help_msg = sprintf
-        "  %s, %-21s  %s",
+        "  %s, %-21s %s",
         $cmd->{short},
         ($cmd->{name} . $help_msg_args),
         $cmd->{desc}
@@ -188,6 +192,12 @@ foreach my $cmd (@$COMMANDS) {
 
     if ( $posarg_mode ) {
         $help_msg .= sprintf ' (%s)', $posarg_mode;
+    }
+
+    if ( ( defined $cmd->{desc_long} ) && ( scalar @{ $cmd->{desc_long} } ) ) {
+        $help_msg .= "\n";
+        # indent by hanging indent + 2
+        $help_msg .= (join "\n", map { sprintf '%30s %s', '', $_ } @{ $cmd->{desc_long} });
     }
 
     $help_key = $cmd->{group};
