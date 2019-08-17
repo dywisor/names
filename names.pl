@@ -319,6 +319,9 @@ Options:
                               This is not a security feature,
                               relative paths may be used to escape <ROOT>.
                               Disables git mode.
+  -s, --short               get command: request a short name,
+                              twice for really short names
+                              (at the expense of randomness)
   -v, --verbose             print debug information
 
 Commands operating on the names dictionary:
@@ -410,6 +413,7 @@ sub main {
     my $want_help       = 0;
     my $want_dry_run    = 0;
     my $comment         = undef;
+    my $want_short      = 0;
     my $want_verbose    = 0;
 
     my $git_root        = undef;
@@ -443,6 +447,7 @@ sub main {
             'n|dry-run'     => \$want_dry_run,
             'P|pool=s'      => \$pool_file,
             'R|root=s'      => sub { $arg_files_root = $_[1]; $want_git = 0; },
+            's|short+'      => \$want_short,
             'v|verbose+'    => \$want_verbose,
         )
     ) {
@@ -605,7 +610,7 @@ sub main {
 
     } elsif ( $cmd_short eq 'g' ) {
         my $num_entries = $argv_parsed[0] || 1;
-        $output_list = $names_pool->do_get ( $num_entries, $comment );
+        $output_list = $names_pool->do_get ( $num_entries, $comment, $want_short );
 
     } elsif ( $cmd_short eq 'o' ) {
         $output_list = $names_pool->get_orphaned_names();
@@ -1671,6 +1676,7 @@ BEGIN {
     sub do_peek {
         my $self = shift;
         my $num_names = shift // 1;
+        my $short = shift;
 
         my $entries = $self->{db}->get_entries();
 
@@ -1689,9 +1695,32 @@ BEGIN {
 
         if ( scalar @candidates_new < $num_names ) {
             return;
+
+        } elsif ( $short ) {
+            my %lv;
+
+            foreach my $name ( @candidates_new ) {
+                my $nlen = length $name;
+                push @{ $lv{$nlen} }, $name;
+            }
+
+            @candidates_new = ();
+
+            my $min_names_count;
+            if ( $short > 1 ) {
+                $min_names_count = $num_names;
+            } else {
+                $min_names_count = 50 + (3 * $num_names);
+            }
+
+            foreach my $nlen ( sort keys %lv ) {
+                push @candidates_new, @{ $lv{$nlen} };
+                last if (scalar @candidates_new >= $min_names_count);
+            }
         }
 
         @cand = List::Util::shuffle ( @candidates_new );
+
         for ( my $k = 0; $k < $num_names; $k++ ) {
             push @names, (shift @cand);
         }
@@ -1728,11 +1757,9 @@ BEGIN {
     }
 
     sub do_get {
-        my $self = shift;
-        my $num_names = shift;
-        my $comment = shift;
+        my ( $self, $num_names, $comment, $short ) = @_;
 
-        my $names = $self->do_peek ( $num_names );
+        my $names = $self->do_peek ( $num_names, $short );
         die "not enough free names available.\n" unless (defined $names);
 
         my $ret = $self->add_names ( $names, STATUS_TAKEN, $comment, 1 );
