@@ -1687,25 +1687,16 @@ BEGIN {
             }
         }
 
-        @cand = List::Util::shuffle ( @candidates_new );
-
-        while ( $num_names > 0 ) {
-            my $name = shift @cand;
-            if ( $name ) {
-                push @names, $name;
-                $num_names--;
-            } else {
-                last;
-            }
-        }
-
-        # candidates ~ released
-
-        if ( $num_names > 0 ) {
+        if ( scalar @candidates_new < $num_names ) {
             return;
-        } else {
-            return \@names;
         }
+
+        @cand = List::Util::shuffle ( @candidates_new );
+        for ( my $k = 0; $k < $num_names; $k++ ) {
+            push @names, (shift @cand);
+        }
+
+        return \@names;
     }
 
     sub do_free {
