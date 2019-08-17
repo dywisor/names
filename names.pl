@@ -289,8 +289,8 @@ ${NAME} (${VERSION}) - ${DESC}
       and pool database file paths to <git topdir>/db/pool. Relative paths
       starting with ./ are looked in the current working directory.
 
-      Git mode is automatically enabled if your current working directory
-      is part of a git repository.
+      Git mode is automatically enabled
+      if your current working directory is part of a git repository.
       This behavior can be overridden with the --git/--no-git option,
       it also gets disabled by the --root option.
 
