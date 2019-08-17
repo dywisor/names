@@ -806,7 +806,9 @@ BEGIN {
 
             # skip empty and comment lines
             if ( /^[^#]/x ) {
-                $self->append ( $_ ) or return 0;
+                foreach my $name (split) {
+                    $self->append ( $name ) or return 0;
+                }
             }
         }
 
