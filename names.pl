@@ -333,11 +333,6 @@ BUGS
   about 0.3s, whereas ops on a fully occupied 100k names pool take between 1-2s.
 
   Do not hardlink the database files, they get rotated on write operations.
-
-  Database files get gzip-compressed after writing them in uncrompressed form.
-  This allows for faster reading, the tradeoff is slower writing.
-  It also introduces a lost-update situation e.g. when traversing through
-  git history, so this feature is likely to be removed.
 EOF
 
 sub get_default_dict_file { return './names_dict'; }
@@ -914,9 +909,6 @@ BEGIN {
     use warnings;
     use feature qw( say );
 
-    use IO::Uncompress::Gunzip;
-    use IO::Compress::Gzip;
-
     @NamesFlatFileDB::ISA = qw( AbstractNamesFlatFileDB );
 
     sub _load_entries_from_fh {
@@ -977,20 +969,10 @@ BEGIN {
         my $filepath = shift;
         die unless $filepath;
 
-        my $filepath_gz = $filepath . '.gz';
-
-        my $entries;
-        my $fh = undef;
-
-        if ( -f $filepath_gz ) {
-            $fh = IO::Uncompress::Gunzip->new ( $filepath_gz );
-        }
-
-        if ( $fh ) {
-            ;
-
-        } elsif ( open $fh, '<', $filepath ) {
-            ;
+        if ( open my $fh, '<', $filepath ) {
+            my $entries = $self->_load_entries_from_fh($fh);
+            close $fh or warn;
+            return $entries;
 
         } elsif ( $!{ENOENT} ) {
             return;
@@ -998,10 +980,6 @@ BEGIN {
         } else {
             die "Failed to open file: $!\n";
         }
-
-        $entries = $self->_load_entries_from_fh($fh);
-        close $fh or warn;
-        return $entries;
     }
 
     sub _write_entries {
@@ -1011,28 +989,13 @@ BEGIN {
         die unless $filepath;
 
         my $fh;
-        my $filepath_new    = $filepath . '.new';
-        my $filepath_gz     = $filepath . '.gz';
-        my $filepath_gz_new = $filepath_gz . '.new';
-        my $gz_status;
+        my $filepath_new = $filepath . '.new';
 
         open $fh, '>', $filepath_new or die;
         $self->_write_entries_to_fh ( $fh, $entries );
         close $fh or warn;
 
-        $gz_status = IO::Compress::Gzip::gzip $filepath_new => $filepath_gz_new;
-
         $self->_rotate_outfile ( $filepath_new, $filepath ) or die "Failed to write db!\n";
-
-        # unlink old gz after writing db
-        #  this might result in outdated gz files,
-        #  but ensures that the db file always exists,
-        #  even if it previously existed as .gz only
-        unlink $filepath_gz;
-
-        if ( $gz_status ) {
-            $self->_rotate_outfile ( $filepath_gz_new, $filepath_gz ) or die "Failed to write gzip db!\n";
-        }
 
         return 1;
     }
