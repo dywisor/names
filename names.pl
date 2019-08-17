@@ -456,45 +456,6 @@ sub main {
         die "newline in comment not allowed - this would break your db.\n";
     }
 
-    $files_root = RootedNamesDBFilePath->new();
-    $files_root->set_unrooted();
-
-    if ( defined $arg_files_root ) {
-        # arg may be empty
-        $want_git = 0;      # should be no-op
-
-        if ( $arg_files_root ) {
-            $files_root->set_dir_rooted ( $arg_files_root );
-        } # else keep files_root unrooted
-
-    } elsif ( $want_git ) {
-        my @git_output = qx(git rev-parse --show-toplevel 2>/dev/null);
-        $git_root = shift @git_output;
-        if ( $git_root ) { chomp $git_root; }
-
-        if ( $git_root ) {
-            $files_root->set_git_rooted ( $git_root );
-
-        } elsif ( $want_git == 2 ) {
-            $git_root = undef;
-            $want_git = 0;
-            # keep files_root unrooted
-
-        } else {
-            die "Failed to get toplevel git dir!\n";
-        }
-
-    } # else keep files_root unrooted
-
-    $dict_file = $files_root->get_dict ( $dict_file );
-    $pool_file = $files_root->get_pool ( $pool_file );
-
-    if ( $want_verbose ) {
-        if ( $want_git ) { print_debug "git root: ${git_root}"; }
-        print_debug "dict db: ${dict_file}";
-        print_debug "pool db: ${pool_file}";
-    }
-
     $arg_cmd = shift @ARGV;
     if ( not $arg_cmd ) {
         die "missing command";
@@ -564,6 +525,45 @@ sub main {
         } else {
             die "invalid posarg mode: ${posarg_mode}";
         }
+    }
+
+    $files_root = RootedNamesDBFilePath->new();
+    $files_root->set_unrooted();
+
+    if ( defined $arg_files_root ) {
+        # arg may be empty
+        $want_git = 0;      # should be no-op
+
+        if ( $arg_files_root ) {
+            $files_root->set_dir_rooted ( $arg_files_root );
+        } # else keep files_root unrooted
+
+    } elsif ( $want_git ) {
+        my @git_output = qx(git rev-parse --show-toplevel 2>/dev/null);
+        $git_root = shift @git_output;
+        if ( $git_root ) { chomp $git_root; }
+
+        if ( $git_root ) {
+            $files_root->set_git_rooted ( $git_root );
+
+        } elsif ( $want_git == 2 ) {
+            $git_root = undef;
+            $want_git = 0;
+            # keep files_root unrooted
+
+        } else {
+            die "Failed to get toplevel git dir!\n";
+        }
+
+    } # else keep files_root unrooted
+
+    $dict_file = $files_root->get_dict ( $dict_file );
+    $pool_file = $files_root->get_pool ( $pool_file );
+
+    if ( $want_verbose ) {
+        if ( $want_git ) { print_debug "git root: ${git_root}"; }
+        print_debug "dict db: ${dict_file}";
+        print_debug "pool db: ${pool_file}";
     }
 
     if ( $cmd->{need_dict} ) {
