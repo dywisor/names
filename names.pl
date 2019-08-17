@@ -271,7 +271,7 @@ ${NAME} (${VERSION}) - ${DESC}
   If a database has been modified, its new file is written to <file>.new.
   The original file is moved to <file>.old prior to putting the new file
   in place. In git mode (see below), the old file gets deleted after
-  checking the new files in.
+  checking the new files in. Intermediate directories are created as needed.
 
   The program offers some convenience helpers:
 
@@ -947,6 +947,9 @@ BEGIN {
     use warnings;
     use feature qw( say );
 
+    use File::Basename;
+    use File::Path;
+
     @NamesFlatFileDB::ISA = qw( AbstractNamesFlatFileDB );
 
     sub _load_entries_from_fh {
@@ -1028,6 +1031,9 @@ BEGIN {
 
         my $fh;
         my $filepath_new = $filepath . '.new';
+
+        # create parent directories as needed, catch errors on file open below
+        File::Path::make_path ( File::Basename::dirname ( $filepath ) );
 
         open $fh, '>', $filepath_new or die;
         $self->_write_entries_to_fh ( $fh, $entries );
