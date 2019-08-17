@@ -378,6 +378,19 @@ sub print_debug {
 }
 
 
+sub str_has_newline {
+    my $arg = shift;
+
+    if ( not $arg ) {
+        return 0;
+    } elsif ( $arg =~ m/\n/s ) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
 # main ( **@ARGV )
 sub main {
     my $ret;
@@ -437,6 +450,10 @@ sub main {
         # newline at end supplied by $usage
         print $usage or die "!$\n";
         return 0;
+    }
+
+    if ( str_has_newline ( $comment ) ) {
+        die "newline in comment not allowed - this would break your db.\n";
     }
 
     $files_root = RootedNamesDBFilePath->new();
