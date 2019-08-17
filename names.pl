@@ -230,6 +230,62 @@ my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|
 my $usage       = <<"EOF";
 ${NAME} (${VERSION}) - ${DESC}
 
+  Manages a pool of names.
+
+  The typical workflow is to import a bulk of (host)names into a "dictionary"
+  once and then repeatedly retrieve random names from the dictionary
+  and add them to your "pool". You may annotate names with comments
+  describing their purpose or when they were taken (-m option).
+
+  Several pools may share the same dictionary.
+
+  Supported commands include adding and removing names from the dictionary
+  or the pool, plus some housekeeping like listing taken names.
+
+  Names follow hostname restrictions, which is the intended use case.
+  N name may be longer than 63 chars and must match some regexp fu.
+
+  When claiming a name for the pool with the 'take' command,
+  it has to exist in the dictionary.
+  Failing that, if the requested name ends in a sequence of digits,
+  optionally preceeded by a hyphen character,
+  its basename must exist in the dictionary.
+  For example, the names "foo-1", "foo1", "foo-002"
+  would all be looked up as-is and then as "foo".
+  Names like "bar1-1" are excluded from this logic.
+
+  Names present in the pool should also exist in the dictionary,
+  however this is not strictly enforced in all cases,
+  e.g. when switching between dictionaries.
+
+  Since importing a huge bulk of names into the dictionary imposes faint
+  control over individual words, the dictionary may contain names
+  that make you feel uncomfortable one way or another.
+  Such names can be banned. They then remain in the dictionary
+  but get marked as do-not-use so that they can not be readded by mistake.
+  Banned names remain in pool databases if already taken there.
+
+  The program offers some convenience helpers:
+
+    - copy to clipboard
+      For get and print commands, also copy the names to both the primary
+      and the clipboard selection, provided that the DISPLAY environment
+      variable is set and xclip(1) is installed.
+
+    - git mode
+      For commands modifying the dict or pool database files,
+      track changes with git-add and git-commit,
+      optionally reusing the comment message (-m option).
+
+      This also restricts dict database file paths to <git topdir>/db/dict
+      and pool database file paths to <git topdir>/db/pool.
+      !!! These paths are subject to change.
+
+      Git mode is automatically enabled if your current working directory
+      is part of a git repository.
+      This behavior can be overridden with the --git/--no-git option.
+
+
 Usage:
   ${short_usage}
   ${prog_name} -h
@@ -263,6 +319,22 @@ ${COMMAND_HELP_CROSS}
 
 Positional Arguments:
   ARG...                    names or files, depending on -N/-F or command
+
+BUGS
+  ${prog_name} uses a flat-file database.
+  While this keeps dependencies light, it has some deficiencies.
+
+  Since ${prog_name} loads the entire database into memory,
+  it gets slower and consumes more memory with increasing dict and pool sizes.
+  Operations on a mostly empty names pool backed by a 20k names dict take
+  about 0.3s, whereas ops on a fully occupied 100k names pool take between 1-2s.
+
+  Do not hardlink the database files, they get rotated on write operations.
+
+  Database files get gzip-compressed after writing them in uncrompressed form.
+  This allows for faster reading, the tradeoff is slower writing.
+  It also introduces a lost-update situation e.g. when traversing through
+  git history, so this feature is likely to be removed.
 EOF
 
 sub get_default_dict_file { return './names_dict'; }
