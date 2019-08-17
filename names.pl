@@ -263,6 +263,11 @@ ${NAME} (${VERSION}) - ${DESC}
   but get marked as do-not-use so that they can not be readded by mistake.
   Banned names remain in pool databases if already taken there.
 
+  If a database has been modified, its new file is written to <file>.new.
+  The original file is moved to <file>.old prior to putting the new file
+  in place. In git mode (see below), the old file gets deleted after
+  checking the new files in.
+
   The program offers some convenience helpers:
 
     - copy to clipboard
@@ -650,6 +655,17 @@ sub main {
                     push @cmdv, $cmd->{name};
                 }
                 system(@cmdv) == 0 or die "git-commit returned non-zero.\n";
+
+                foreach my $fp_old ( map { ($_ . '.old'); } @changed_files ) {
+                    if ( unlink $fp_old ) {
+                        if ( $want_verbose ) {
+                            print_debug "git: removed backup file: ${fp_old}";
+                        }
+
+                    } elsif ( ! $!{ENOENT} ) {
+                         warn "failed to remove backup file: ${fp_old}\n";
+                    }
+                }
             }
         }
     }
