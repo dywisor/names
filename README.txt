@@ -43,7 +43,7 @@ names (0.2) - make a name for yourself
   If a database has been modified, its new file is written to <file>.new.
   The original file is moved to <file>.old prior to putting the new file
   in place. In git mode (see below), the old file gets deleted after
-  checking the new files in.
+  checking the new files in. Intermediate directories are created as needed.
 
   The program offers some convenience helpers:
 
@@ -61,8 +61,8 @@ names (0.2) - make a name for yourself
       and pool database file paths to <git topdir>/db/pool. Relative paths
       starting with ./ are looked in the current working directory.
 
-      Git mode is automatically enabled if your current working directory
-      is part of a git repository.
+      Git mode is automatically enabled
+      if your current working directory is part of a git repository.
       This behavior can be overridden with the --git/--no-git option,
       it also gets disabled by the --root option.
 
@@ -91,6 +91,9 @@ Options:
                               This is not a security feature,
                               relative paths may be used to escape <ROOT>.
                               Disables git mode.
+  -s, --short               get command: request a short name,
+                              twice for really short names
+                              (at the expense of randomness)
   -v, --verbose             print debug information
 
 Commands operating on the names dictionary:
