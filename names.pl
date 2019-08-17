@@ -556,7 +556,7 @@ sub main {
         } elsif ( $posarg_mode eq 'uint' ) {
             if ( scalar @ARGV ) {
                 foreach (@ARGV) {
-                    die "invalid number" unless /^[0-9]+$/mx;
+                    die "invalid number" unless /^[0-9]+$/sx;
                     push @argv_parsed, $_;
                 }
             }
@@ -709,7 +709,7 @@ BEGIN {
 
     our $NAMES_MAX_LEN = 63;    # min len enforced via regexp
 
-    our $NAMES_REGEXP = qr/^(?:[a-z0-9]+(?:-[a-z0-9]+)*)$/mx;
+    our $NAMES_REGEXP = qr/^(?:[a-z0-9]+(?:-[a-z0-9]+)*)$/sx;
     # stem     := words not ending in a number, separated by a hyphen
     #             (COULDFIX: only last word must not end with a number)
     #          := <wordlist>
@@ -718,10 +718,10 @@ BEGIN {
     # suffix   := ["-"] <id>
     # id       := number
     #
-    our $_NAMES_STEM_REGEXP = qr/(?<stem>(?:[a-z]+(?:[0-9]*[a-z]+)*)(?:(?:[0-9]*-[a-z]+(?:[0-9]*[a-z]+)*)*))/mx;
-    our $_NAMES_SUFFIX_REGEXP = qr/(?<suffix>-?(?<id>[0-9]+))/mx;
+    our $_NAMES_STEM_REGEXP = qr/(?<stem>(?:[a-z]+(?:[0-9]*[a-z]+)*)(?:(?:[0-9]*-[a-z]+(?:[0-9]*[a-z]+)*)*))/sx;
+    our $_NAMES_SUFFIX_REGEXP = qr/(?<suffix>-?(?<id>[0-9]+))/sx;
 
-    our $NAMES_STEMSPLIT_REGEXP = qr/^${_NAMES_STEM_REGEXP}${_NAMES_SUFFIX_REGEXP}$/mx;
+    our $NAMES_STEMSPLIT_REGEXP = qr/^${_NAMES_STEM_REGEXP}${_NAMES_SUFFIX_REGEXP}$/sx;
 
     sub normalize_name {
         my $pat = $NAMES_REGEXP;
@@ -801,11 +801,11 @@ BEGIN {
 
         while (<$fh>) {
             # str_strip()
-            s/^\s+//mx;
-            s/\s+$//mx;
+            s/^\s+//sx;
+            s/\s+$//sx;
 
             # skip empty and comment lines
-            if ( /^[^#]/mx ) {
+            if ( /^[^#]/x ) {
                 $self->append ( $_ ) or return 0;
             }
         }
@@ -951,18 +951,18 @@ BEGIN {
 
         while (<$fh>) {
             # str_strip()
-            s/^\s+//mx;
-            s/\s+$//mx;
+            s/^\s+//sx;
+            s/\s+$//sx;
 
             # skip empty and comment lines
             #  Note that comment lines will be lost on rewrite
-            if ( /^[^#]/mx ) {
-                my @fields  = split /\|/mx, $_, 3;
+            if ( /^[^#]/x ) {
+                my @fields  = split /\|/sx, $_, 3;
                 my $nfields = scalar @fields;
 
                 if ( $nfields != 3 ) { die "file format error\n"; }
                 # <status> <name> <comment>
-                die "file data error\n" unless ( $fields[0] =~ /^[0-9]+$/mx );
+                die "file data error\n" unless ( $fields[0] =~ /^[0-9]+$/sx );
                 die "file data error\n" unless ( $fields[1] );
 
                 my $entry = NamesDBEntry->new (
@@ -1841,10 +1841,10 @@ BEGIN {
                 return $self->{root};
             }
 
-        } elsif ( $arg =~ /(?:^|\/)(?:\.\.)(?:$|\/)/mx ) {
+        } elsif ( $arg =~ /(?:^|\/)(?:\.\.)(?:$|\/)/x ) {
             die "unsafe paths not allowed: ${arg}\n";
 
-        } elsif ( $arg =~ /^\.\//mx ) {
+        } elsif ( $arg =~ /^\.\//x ) {
             # return relative path as-is
             return $arg;
 
@@ -1853,7 +1853,7 @@ BEGIN {
 
             my ( $vol, $path, $_dc ) = File::Spec->splitpath ( $fname, 1 );
 
-            if ( ( $vol ) || ( $path =~ /^\//mx ) ) {
+            if ( ( $vol ) || ( $path =~ /^\//x ) ) {
                 die "absolute paths not allowed: ${fname}\n";
 
             } elsif ( $subdir_path ) {
