@@ -9,9 +9,7 @@ use 5.10.0;
 
 use Getopt::Long qw(:config posix_default bundling no_ignore_case );
 
-use Cwd;
 use File::Basename;
-use File::Spec;
 
 our $VERSION = 0.2;
 our $NAME    = q{names};
@@ -226,7 +224,7 @@ my $COMMAND_HELP_CROSS = join "\n", @{ $COMMAND_HELP->{cross} };
 
 
 my $prog_name   = File::Basename::basename($0);
-my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|-R <DIR>} <CMD> {<ARG>}";
+my $short_usage = "${prog_name} {-c|-D <FILE>|-F|-g|-h|-m <MSG>|-N|-n|-P <FILE>|-R <DIR>|-v} <CMD> {<ARG>}";
 my $usage       = <<"EOF";
 ${NAME} (${VERSION}) - ${DESC}
 
@@ -278,12 +276,13 @@ ${NAME} (${VERSION}) - ${DESC}
       optionally reusing the comment message (-m option).
 
       This also restricts dict database file paths to <git topdir>/db/dict
-      and pool database file paths to <git topdir>/db/pool.
-      !!! These paths are subject to change.
+      and pool database file paths to <git topdir>/db/pool. Relative paths
+      starting with ./ are looked in the current working directory.
 
       Git mode is automatically enabled if your current working directory
       is part of a git repository.
-      This behavior can be overridden with the --git/--no-git option.
+      This behavior can be overridden with the --git/--no-git option,
+      it also gets disabled by the --root option.
 
 
 Usage:
@@ -305,8 +304,12 @@ Options:
   -n, --dry-run             do not write database
   -P, --pool <POOL>         pool of acquired names file
   -R, --root <ROOT>         look up dict and pool files in <ROOT>:
-                              <ROOT>/dict/<DICT> (DICT:="default")
-                              <ROOT>/pool/<POOL> (POOL:="default")
+                              <ROOT>/db/dict/<DICT> (DICT:="default")
+                              <ROOT>/db/pool/<POOL> (POOL:="default")
+                              This is not a security feature,
+                              relative paths may be used to escape <ROOT>.
+                              Disables git mode.
+  -v, --verbose             print debug information
 
 Commands operating on the names dictionary:
 ${COMMAND_HELP_DICT}
@@ -372,41 +375,8 @@ sub output_names_to_clipboard {
 }
 
 
-
-# get_rooted_path ( root, subdir_path, arg, arg_default )
-sub get_rooted_path {
-    my ( $root, $subdir_path, $arg, $arg_default ) = @_;
-    my $fname;
-
-    if ( not $arg ) {
-        if ( $arg_default ) {
-            $fname = $arg_default;  # unchecked
-
-        } elsif ( $subdir_path ) {
-            return File::Spec->catfile ( $root, $subdir_path );
-
-        } else {
-            return $root;
-        }
-
-    } else {
-        $fname = File::Spec->canonpath ( $arg );
-
-        my ( $vol, $path, $_dc ) = File::Spec->splitpath ( $fname, 1 );
-
-        if ( ( $vol ) || ( $path =~ /^\//mx ) ) {
-            die "absolute paths not allowed: ${fname}\n";
-
-        } elsif ( $path =~ /(?:^|\/)(?:\.\.)(?:$|\/)/mx ) {
-            die "unsafe paths not allowed: ${fname}\n";
-        }
-    }
-
-    if ( $subdir_path ) {
-        return File::Spec->catfile ( $root, $subdir_path, $fname );
-    } else {
-        return File::Spec->catfile ( $root, $fname );
-    }
+sub print_debug {
+    say {*STDOUT} @_;
 }
 
 
@@ -418,14 +388,16 @@ sub main {
     my $posarg_mode     = undef;
     my $want_clipboard  = undef;
     my $want_git        = 2;
-    my $files_root      = undef;
+    my $arg_files_root  = undef;
     my $dict_file       = undef;
     my $pool_file       = undef;
     my $want_help       = 0;
     my $want_dry_run    = 0;
     my $comment         = undef;
+    my $want_verbose    = 0;
 
     my $git_root        = undef;
+    my $files_root      = undef;
 
     my $arg_cmd         = undef;
     my $cmd             = undef;
@@ -446,14 +418,16 @@ sub main {
         ! GetOptions (
             'c|clipboard'   => \$want_clipboard,
             'D|dict=s'      => \$dict_file,
-            'g|git!'        => \$want_git,
+            'g|git'         => sub { $arg_files_root = undef; $want_git = 1; },
+            'no-git'        => sub { $want_git = 0; },
             'F|files'       => sub { $posarg_mode = 'F'; },
             'h|help'        => \$want_help,
             'm|message=s'   => \$comment,
             'N|names'       => sub { $posarg_mode = 'N'; },
             'n|dry-run'     => \$want_dry_run,
             'P|pool=s'      => \$pool_file,
-            'R|root=s'      => \$files_root,
+            'R|root=s'      => sub { $arg_files_root = $_[1]; $want_git = 0; },
+            'v|verbose+'    => \$want_verbose,
         )
     ) {
         say {*STDERR} 'Usage: ', $short_usage or die "!$\n";
@@ -467,39 +441,43 @@ sub main {
         return 0;
     }
 
-    if ( $want_git ) {
+    $files_root = RootedNamesDBFilePath->new();
+    $files_root->set_unrooted();
+
+    if ( defined $arg_files_root ) {
+        # arg may be empty
+        $want_git = 0;      # should be no-op
+
+        if ( $arg_files_root ) {
+            $files_root->set_dir_rooted ( $arg_files_root );
+        } # else keep files_root unrooted
+
+    } elsif ( $want_git ) {
         my @git_output = qx(git rev-parse --show-toplevel 2>/dev/null);
         $git_root = shift @git_output;
         if ( $git_root ) { chomp $git_root; }
 
         if ( $git_root ) {
-            if ( defined $files_root ) {
-                # keep files_root as-is even if empty
-
-            } else {
-                $files_root = get_rooted_path ( $git_root, undef, 'db', undef );
-            }
+            $files_root->set_git_rooted ( $git_root );
 
         } elsif ( $want_git == 2 ) {
             $git_root = undef;
             $want_git = 0;
+            # keep files_root unrooted
 
         } else {
             die "Failed to get toplevel git dir!\n";
         }
-    }
 
-    if ( $files_root ) {
-        my $real_files_root = Cwd::realpath ( $files_root );
-        die "failed to resolve root dir ${files_root}: $!\n" unless $real_files_root;
-        $files_root = $real_files_root;
+    } # else keep files_root unrooted
 
-        $dict_file = get_rooted_path ( $files_root, 'dict', $dict_file, 'default' );
-        $pool_file = get_rooted_path ( $files_root, 'pool', $pool_file, 'default' );
+    $dict_file = $files_root->get_dict ( $dict_file );
+    $pool_file = $files_root->get_pool ( $pool_file );
 
-    } else {
-        $dict_file //= get_default_dict_file();
-        $pool_file //= get_default_pool_file();
+    if ( $want_verbose ) {
+        if ( $want_git ) { print_debug "git root: ${git_root}"; }
+        print_debug "dict db: ${dict_file}";
+        print_debug "pool db: ${pool_file}";
     }
 
     $arg_cmd = shift @ARGV;
@@ -641,20 +619,30 @@ sub main {
         my @changed_files;
 
         if ( defined $names_dict ) {
+            if ( $want_verbose ) { print_debug "Committing dict database."; }
+
             if ( $names_dict->{db}->commit() == 1 ) {
                 push @changed_files, $names_dict->{db}->get_filepath();
+                if ( $want_verbose ) { print_debug "Wrote dict database."; }
             }
         }
 
         if ( defined $names_pool ) {
+            if ( $want_verbose ) { print_debug "Committing pool database."; }
+
             if ( $names_pool->{db}->commit() == 1 ) {
                 push @changed_files, $names_pool->{db}->get_filepath();
+                if ( $want_verbose ) { print_debug "Wrote pool database."; }
             }
         }
 
         if ( scalar @changed_files ) {
             if ( $want_git ) {
                 my @cmdv;
+
+                if ( $want_verbose ) {
+                    print_debug "git: checking in changed files.";
+                }
 
                 @cmdv = ( 'git', 'add', '--chmod=-x', '--' );
                 push @cmdv, @changed_files;
@@ -1760,6 +1748,127 @@ BEGIN {
         my $names = shift;
 
         return $self->delete_names ( $names );
+    }
+
+
+    package RootedNamesDBFilePath;
+
+    use strict;
+    use warnings;
+
+    use File::Spec;
+    use Cwd;
+
+    sub new {
+        my $class = shift;
+        my $self = {
+            root         => undef,
+            dict_subdir  => undef,
+            dict_defname => undef,
+            pool_subdir  => undef,
+            pool_defname => undef,
+        };
+
+        return bless $self, $class;
+    }
+
+    sub _set_root {
+        my $self = shift;
+        my $arg  = shift;
+
+        my $root = Cwd::realpath ( $arg );
+
+        die "failed to resolve root dir ${arg}: $!\n" unless $root;
+
+        $self->{root} = $root;
+
+        return 1;
+    }
+
+
+    sub set_unrooted {
+        my $self = shift;
+
+        $self->{root}         = undef;
+        $self->{dict_subdir}  = undef;
+        $self->{dict_defname} = 'names_dict';
+        $self->{pool_subdir}  = undef;
+        $self->{pool_defname} = 'names_pool';
+
+        return 1;
+    }
+
+    sub set_dir_rooted {
+        my $self = shift;
+
+        $self->_set_root ( (shift) );
+        $self->{dict_subdir}  = 'db/dict';
+        $self->{dict_defname} = 'default';
+        $self->{pool_subdir}  = 'db/pool';
+        $self->{pool_defname} = 'default';
+
+        return 1;
+    }
+
+    sub set_git_rooted {
+        my $self = shift;
+
+        return $self->set_dir_rooted ( @_ );
+    }
+
+    sub get_dict {
+        my ( $self, $arg ) = @_;
+
+        return $self->get (
+            $self->{dict_subdir}, ($arg || $self->{dict_defname})
+        );
+    }
+
+    sub get_pool {
+        my ( $self, $arg ) = @_;
+
+        return $self->get (
+            $self->{pool_subdir}, ($arg || $self->{pool_defname})
+        );
+    }
+
+    # get ( self, [subdir_path, [arg]] )
+    sub get {
+        my ( $self, $subdir_path, $arg ) = @_;
+
+        if ( not $self->{root} ) {
+            # return arg or cwd
+            return ( $arg || '.' );
+
+        } elsif ( not $arg ) {
+            if ( $subdir_path ) {
+                return File::Spec->catfile ( $self->{root}, $subdir_path );
+            } else {
+                return $self->{root};
+            }
+
+        } elsif ( $arg =~ /(?:^|\/)(?:\.\.)(?:$|\/)/mx ) {
+            die "unsafe paths not allowed: ${arg}\n";
+
+        } elsif ( $arg =~ /^\.\//mx ) {
+            # return relative path as-is
+            return $arg;
+
+        } else {
+            my $fname = File::Spec->canonpath ( $arg );
+
+            my ( $vol, $path, $_dc ) = File::Spec->splitpath ( $fname, 1 );
+
+            if ( ( $vol ) || ( $path =~ /^\//mx ) ) {
+                die "absolute paths not allowed: ${fname}\n";
+
+            } elsif ( $subdir_path ) {
+                return File::Spec->catfile ( $self->{root}, $subdir_path, $fname );
+
+            } else {
+                return File::Spec->catfile ( $self->{root}, $fname );
+            }
+        }
     }
 
 }
