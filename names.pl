@@ -340,8 +340,6 @@ BUGS
   Do not hardlink the database files, they get rotated on write operations.
 EOF
 
-sub get_default_dict_file { return './names_dict'; }
-sub get_default_pool_file { return './names_pool'; }
 
 sub output_names_to_stdout {
     my $names = shift;
