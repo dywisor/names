@@ -1681,30 +1681,30 @@ BEGIN {
         my $entries = $self->{db}->get_entries();
 
         my $all_names;
-        my @candidates_new;
         my @cand;
+        my @cand_shuf;
         my @names;
 
         $all_names = $self->{dict}->get_names ( STATUS_TAKEN );
 
         foreach my $name ( @$all_names ) {
             if ( not exists $entries->{$name} ) {
-                push @candidates_new, $name;
+                push @cand, $name;
             }
         }
 
-        if ( scalar @candidates_new < $num_names ) {
+        if ( scalar @cand < $num_names ) {
             return;
 
         } elsif ( $short ) {
             my %lv;
 
-            foreach my $name ( @candidates_new ) {
+            foreach my $name ( @cand ) {
                 my $nlen = length $name;
                 push @{ $lv{$nlen} }, $name;
             }
 
-            @candidates_new = ();
+            @cand = ();
 
             my $min_names_count;
             if ( $short > 1 ) {
@@ -1714,17 +1714,13 @@ BEGIN {
             }
 
             foreach my $nlen ( sort keys %lv ) {
-                push @candidates_new, @{ $lv{$nlen} };
-                last if (scalar @candidates_new >= $min_names_count);
+                push @cand, @{ $lv{$nlen} };
+                last if (scalar @cand >= $min_names_count);
             }
         }
 
-        @cand = List::Util::shuffle ( @candidates_new );
-
-        for ( my $k = 0; $k < $num_names; $k++ ) {
-            push @names, (shift @cand);
-        }
-
+        @cand_shuf = List::Util::shuffle ( @cand );
+        @names = @cand_shuf [0..($num_names - 1)];
         return \@names;
     }
 
