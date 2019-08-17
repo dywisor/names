@@ -243,6 +243,11 @@ ${NAME} (${VERSION}) - ${DESC}
   Names follow hostname restrictions, which is the intended use case.
   N name may be longer than 63 chars and must match some regexp fu.
 
+  Names can be given on the cmdline or read from files,
+  which can be controlled with the -N and -F switches.
+  The default mode depends on the command
+  (see the (N) or (F) suffix in description below).
+
   When claiming a name for the pool with the 'take' command,
   it has to exist in the dictionary.
   Failing that, if the requested name ends in a sequence of digits,
