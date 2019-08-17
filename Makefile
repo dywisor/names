@@ -25,5 +25,12 @@ PHONY += install
 install:
 	$(DOEXE) names.pl $(DESTDIR)$(BINDIR)/names
 
+PHONY += readme
+readme: README.txt
+
+README.txt: names.pl
+	perl ./names.pl -h > $(@).make_tmp
+	mv -f -- $(@).make_tmp $(@)
+
 
 .PHONY: $(PHONY)
