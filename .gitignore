@@ -1,6 +1,5 @@
 *.old
 *.new
-*.gz
 *.sw[a-z]
 /names_dict
 /names_pool
@@ -40,7 +39,6 @@ inc/
 /blib/
 /_eumm/
 /*.gz
-/Makefile
 /Makefile.old
 /MANIFEST.bak
 /pm_to_blib
