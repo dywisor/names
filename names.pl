@@ -464,7 +464,66 @@ exit main();
 
 
 BEGIN {
+    package NamesUtil;
+
+    use strict;
+    use warnings;
+
+    our $NAMES_MAX_LEN = 63;    # min len enforced via regexp
+
+    our $NAMES_REGEXP = qr/^(?:[a-z0-9]+(?:-[a-z0-9]+)*)$/mx;
+    # stem     := words not ending in a number, separated by a hyphen
+    #             (COULDFIX: only last word must not end with a number)
+    #          := <wordlist>
+    # wordlist := <word>
+    # wordlist := <word> <wordlist>
+    # suffix   := ["-"] <id>
+    # id       := number
+    #
+    our $_NAMES_STEM_REGEXP = qr/(?<stem>(?:[a-z]+(?:[0-9]*[a-z]+)*)(?:(?:[0-9]*-[a-z]+(?:[0-9]*[a-z]+)*)*))/mx;
+    our $_NAMES_SUFFIX_REGEXP = qr/(?<suffix>-?(?<id>[0-9]+))/mx;
+
+    our $NAMES_STEMSPLIT_REGEXP = qr/^${_NAMES_STEM_REGEXP}${_NAMES_SUFFIX_REGEXP}$/mx;
+
+    sub normalize_name {
+        my $pat = $NAMES_REGEXP;
+        my $arg;
+        my $name;
+
+        $arg = shift;
+
+        if ( length $arg > $NAMES_MAX_LEN ) {
+            return;
+        }
+
+        $name = (lc $arg);
+
+        if ( $name =~ /$pat/ ) {
+            return $name;
+
+        } else {
+            return;
+        }
+    }
+
+    sub split_stem {
+        my $pat = $NAMES_STEMSPLIT_REGEXP;
+        my $arg;
+
+        $arg = shift;
+
+        if ( $arg =~ $NAMES_STEMSPLIT_REGEXP ) {
+            return $+{stem};
+        } else {
+            return;
+        }
+    }
+
+
     package NamesList;
+
+    use strict;
+    use warnings;
 
     sub new {
         my $class = shift;
@@ -473,29 +532,11 @@ BEGIN {
         return bless $self, $class;
     }
 
-    sub normalize_name {
-        my ( $self, $arg ) = @_;
-        my $name;
-
-        if ( length $arg > 63 ) {
-            return;
-        }
-
-        $name = (lc $arg);
-
-        if ( $name =~ /^(?:[a-z0-9]+(?:-[a-z0-9]+)*)$/mx ) {
-            return $name;
-
-        } else {
-            return;
-        }
-    }
-
     sub append {
         my ( $self, $arg ) = @_;
         my $name;
 
-        $name = $self->normalize_name ( $arg );
+        $name = NamesUtil::normalize_name ( $arg );
         if ( $name ) {
             push @$self, $name;
             return 1;
@@ -1254,30 +1295,49 @@ BEGIN {
         my $entries = $self->{db}->get_entries();
         my $dict_entries = $self->{dict}->{db}->get_entries();
 
-        my @names_to_add;
-        my @names_to_update;
-        my @names_taken;
-        my @names_missing;
+        my %names_to_add;
+        my %names_to_update;
+        my %names_taken;
+        my %names_missing;
 
         foreach my $name (@$names) {
             if ( exists $entries->{$name} ) {
 
                 if ( $entries->{$name}->{status} == STATUS_TAKEN ) {
-                    push @names_taken, $name;
+                    $names_taken{$name} = 1;
 
                 } else {
-                    push @names_to_update, $name;
+                    $names_to_update{$name} = 1;
                 }
 
-            } elsif ( not exists $dict_entries->{$name} ) {
-                push @names_missing, $name;
+            } elsif ( exists $dict_entries->{$name} ) {
+                $names_to_add{$name} = 1;
 
             } else {
-                push @names_to_add, $name;
+                # try harder
+                my $stem = NamesUtil::split_stem ( $name );
+
+                if ( $stem ) {
+                    if ( exists $dict_entries->{$stem} ) {
+                        # should also take $stem if not already done
+                        if ( not exists $entries->{$stem} ) {
+                            $names_to_add{$stem} = 1;
+                        }
+
+                        $names_to_add{$name} = 2;
+
+                    } else {
+                        $names_missing{$stem} = 1;
+                        $names_missing{$name} = 2;
+                    }
+
+                } else {
+                    $names_missing{$name} = 1;
+                }
             }
         }
 
-        return \@names_to_add, \@names_to_update, \@names_taken, \@names_missing;
+        return \%names_to_add, \%names_to_update, \%names_taken, \%names_missing;
     }
 
     sub do_take {
@@ -1293,30 +1353,36 @@ BEGIN {
         my $ret_add;
         my $ret_update;
 
-        if ( scalar @$names_taken ) {
+        if ( scalar %$names_taken ) {
             $fail = 1;
-            warn 'Names already taken: ' . (join ', ', @$names_taken) . "\n";
+            warn 'Names already taken: ' . (join ', ', sort keys %$names_taken) . "\n";
         }
 
-        if ( scalar @$names_missing ) {
+        if ( scalar %$names_missing ) {
             $fail = 1;
-            warn 'Names missing: ' . (join ', ', @$names_missing) . "\n";
+            warn 'Names missing: ' . (join ', ', sort keys %$names_missing) . "\n";
         }
 
         if ( $fail ) {
             die "cannot claim names.\n";
         }
 
-        if ( scalar @$names_to_add ) {
-            $ret_add = $self->add_names ( $names_to_add, STATUS_TAKEN, $comment, 1 );
+        if ( scalar %$names_to_add ) {
+            my @to_add = keys %$names_to_add;
+
+            $ret_add = $self->add_names ( \@to_add, STATUS_TAKEN, $comment, 1 );
             if ( $ret_add != 1 ) { return $ret_add; }
+
         } else {
             $ret_add = 1;
         }
 
-        if ( scalar @$names_to_update ) {
-            $ret_update = $self->update_names ( $names_to_update, STATUS_TAKEN, $comment );
+        if ( scalar %$names_to_update ) {
+            my @to_update = keys %$names_to_update;
+
+            $ret_update = $self->update_names ( \@to_update, STATUS_TAKEN, $comment );
             if ( $ret_update < 1 ) { return $ret_update; }
+
         } else {
             $ret_update = 1;
         }
@@ -1336,28 +1402,40 @@ BEGIN {
         my $ret_add;
         my $ret_update;
 
-        if ( scalar @$names_taken ) {
-            warn 'Names already taken: ' . (join ', ', @$names_taken) . "\n";
+        if ( scalar %$names_taken ) {
+            warn 'Names already taken: ' . (join ', ', sort %$names_taken) . "\n";
             # but continue
         }
 
-        if ( scalar @$names_missing ) {
-            $ret_add = $self->{dict}->do_add ( $names );
-            if ( $ret_add < 1 ) { die "Failed to add new names to dict.\n"; }
+        if ( scalar %$names_missing ) {
+            my @to_add_to_dict = grep { $names_missing->{$_} == 1 } keys %$names_missing;
 
-            push @$names_to_add, @$names_missing;
+            if ( scalar @to_add_to_dict ) {
+                $ret_add = $self->{dict}->do_add ( \@to_add_to_dict );
+                if ( $ret_add < 1 ) { die "Failed to add new names to dict.\n"; }
+            }
+
+            foreach my $name ( keys %$names_missing ) {
+                $names_to_add->{$name} = $names_missing->{$name};
+            }
         }
 
-        if ( scalar @$names_to_add ) {
-            $ret_add = $self->add_names ( $names_to_add, STATUS_TAKEN, $comment, 1 );
+        if ( scalar %$names_to_add ) {
+            my @to_add = keys %$names_to_add;
+
+            $ret_add = $self->add_names ( \@to_add, STATUS_TAKEN, $comment, 1 );
             if ( $ret_add != 1 ) { return $ret_add; }
+
         } else {
             $ret_add = 1;
         }
 
-        if ( scalar @$names_to_update ) {
-            $ret_update = $self->update_names ( $names_to_update, STATUS_TAKEN, $comment );
+        if ( scalar %$names_to_update ) {
+            my @to_update = keys %$names_to_update;
+
+            $ret_update = $self->update_names ( \@to_update, STATUS_TAKEN, $comment );
             if ( $ret_update < 1 ) { return $ret_update; }
+
         } else {
             $ret_update = 1;
         }
